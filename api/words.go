@@ -85,6 +85,24 @@ func decodeWord(r *http.Request) (Word, error) {
 	return input, nil
 }
 
+func getWordID(r *http.Request) (int, error) {
+	path := strings.Trim(r.URL.Path, "/")
+	parts := strings.Split(path, "/")
+	if len(parts) >= 3 {
+		id, err := strconv.Atoi(parts[len(parts)-1])
+		if err == nil {
+			return id, nil
+		}
+	}
+
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil || id <= 0 {
+		return 0, errors.New("valid id is required in path, for example /api/words/1")
+	}
+
+	return id, nil
+}
+
 // Esta es la funcion que Vercel detecta.
 func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -139,7 +157,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra creada"})
 
 	case http.MethodPut:
-		id, _ := strconv.Atoi(r.URL.Query().Get("id"))
+		id, err := getWordID(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		input, err := decodeWord(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -155,9 +178,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra actualizada"})
 
 	case http.MethodDelete:
-		id, _ := strconv.Atoi(r.URL.Query().Get("id"))
+		id, err := getWordID(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-		_, err := db.Exec(context.Background(), "DELETE FROM words WHERE id=$1", id)
+		_, err = db.Exec(context.Background(), "DELETE FROM words WHERE id=$1", id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
