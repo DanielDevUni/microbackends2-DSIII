@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -15,13 +15,12 @@ type Word struct {
 	Word string `json:"word"`
 }
 
-// Conexión a Supabase usando variables de entorno
 func GetDB() (*pgx.Conn, error) {
-	url := os.Getenv("SUPABASE_HOST")  // ej: db.abcd.supabase.co
-	user := os.Getenv("SUPABASE_USER") // normalmente "postgres"
+	url := os.Getenv("SUPABASE_HOST")
+	user := os.Getenv("SUPABASE_USER")
 	pass := os.Getenv("SUPABASE_PASSWORD")
-	dbname := os.Getenv("SUPABASE_DB") // normalmente "postgres"
-	port := os.Getenv("SUPABASE_PORT") // "5432"
+	dbname := os.Getenv("SUPABASE_DB")
+	port := os.Getenv("SUPABASE_PORT")
 
 	connStr := "postgres://" + user + ":" + pass + "@" + url + ":" + port + "/" + dbname
 	return pgx.Connect(context.Background(), connStr)
@@ -42,16 +41,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		defer rows.Close()
 		var words []Word
 		for rows.Next() {
-			var w Word
-			rows.Scan(&w.ID, &w.Word)
-			words = append(words, w)
+			var word Word
+			rows.Scan(&word.ID, &word.Word)
+			words = append(words, word)
 		}
 		json.NewEncoder(w).Encode(words)
 
 	case "POST":
-		var w Word
-		json.NewDecoder(r.Body).Decode(&w)
-		_, err := db.Exec(context.Background(), "INSERT INTO words (word) VALUES ($1)", w.Word)
+		var input Word
+		json.NewDecoder(r.Body).Decode(&input)
+		_, err := db.Exec(context.Background(), "INSERT INTO words (word) VALUES ($1)", input.Word)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -60,9 +59,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	case "PUT":
 		id, _ := strconv.Atoi(r.URL.Query().Get("id"))
-		var w Word
-		json.NewDecoder(r.Body).Decode(&w)
-		_, err := db.Exec(context.Background(), "UPDATE words SET word=$1 WHERE id=$2", w.Word, id)
+		var input Word
+		json.NewDecoder(r.Body).Decode(&input)
+		_, err := db.Exec(context.Background(), "UPDATE words SET word=$1 WHERE id=$2", input.Word, id)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
