@@ -3,7 +3,9 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -17,9 +19,21 @@ type Word struct {
 	Word string `json:"word"`
 }
 
+func connectDB(connStr string) (*pgx.Conn, error) {
+	config, err := pgx.ParseConfig(connStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Supabase pooler uses pgBouncer semantics; simple protocol avoids prepared statement cache issues.
+	config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	return pgx.ConnectConfig(context.Background(), config)
+}
+
 func GetDB() (*pgx.Conn, error) {
 	if connStr := strings.TrimSpace(os.Getenv("SUPABASE_URL")); connStr != "" {
-		return pgx.Connect(context.Background(), connStr)
+		return connectDB(connStr)
 	}
 
 	host := strings.TrimSpace(os.Getenv("SUPABASE_HOST"))
@@ -50,11 +64,33 @@ func GetDB() (*pgx.Conn, error) {
 	}
 
 	connStr := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=require", user, pass, host, port, dbname)
-	return pgx.Connect(context.Background(), connStr)
+	return connectDB(connStr)
+}
+
+func decodeWord(r *http.Request) (Word, error) {
+	defer r.Body.Close()
+
+	var input Word
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		if errors.Is(err, io.EOF) {
+			return Word{}, errors.New("request body is required")
+		}
+		return Word{}, err
+	}
+
+	if strings.TrimSpace(input.Word) == "" {
+		return Word{}, errors.New("field 'word' is required")
+	}
+
+	return input, nil
 }
 
 // Esta es la funcion que Vercel detecta.
 func Handler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Debug-Method", r.Method)
+	w.Header().Set("X-Debug-Path", r.URL.Path)
+
 	db, err := GetDB()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -85,41 +121,37 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(words)
 
 	case http.MethodPost:
-		var input Word
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		input, err := decodeWord(r)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		_, err := db.Exec(context.Background(), "INSERT INTO words (word) VALUES ($1)", input.Word)
+		_, err = db.Exec(context.Background(), "INSERT INTO words (word) VALUES ($1)", input.Word)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra creada"})
 
 	case http.MethodPut:
 		id, _ := strconv.Atoi(r.URL.Query().Get("id"))
-
-		var input Word
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		input, err := decodeWord(r)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		_, err := db.Exec(context.Background(), "UPDATE words SET word=$1 WHERE id=$2", input.Word, id)
+		_, err = db.Exec(context.Background(), "UPDATE words SET word=$1 WHERE id=$2", input.Word, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra actualizada"})
 
 	case http.MethodDelete:
@@ -131,7 +163,6 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra eliminada"})
 
 	default:
