@@ -1,0 +1,14 @@
+module words
+
+go 1.26.1
+
+require (
+	github.com/google/uuid v1.3.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.8.0 // indirect
+	github.com/julienschmidt/httprouter v1.3.0
+	github.com/supabase-community/gotrue-go v1.2.1 // indirect
+	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80 // indirect
+	golang.org/x/text v0.29.0 // indirect
+)
