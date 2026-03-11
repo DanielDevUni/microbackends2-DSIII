@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 
-	"github.com/julienschmidt/httprouter"
+	"github.com/jackc/pgx/v5"
 )
 
 type Word struct {
@@ -14,7 +15,20 @@ type Word struct {
 	Word string `json:"word"`
 }
 
-func handler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+// Conexión a Supabase usando variables de entorno
+func GetDB() (*pgx.Conn, error) {
+	url := os.Getenv("SUPABASE_HOST")  // ej: db.abcd.supabase.co
+	user := os.Getenv("SUPABASE_USER") // normalmente "postgres"
+	pass := os.Getenv("SUPABASE_PASSWORD")
+	dbname := os.Getenv("SUPABASE_DB") // normalmente "postgres"
+	port := os.Getenv("SUPABASE_PORT") // "5432"
+
+	connStr := "postgres://" + user + ":" + pass + "@" + url + ":" + port + "/" + dbname
+	return pgx.Connect(context.Background(), connStr)
+}
+
+// Esta es la función que Vercel detecta
+func Handler(w http.ResponseWriter, r *http.Request) {
 	db, err := GetDB()
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -45,7 +59,7 @@ func handler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra creada"})
 
 	case "PUT":
-		id, _ := strconv.Atoi(ps.ByName("id"))
+		id, _ := strconv.Atoi(r.URL.Query().Get("id"))
 		var w Word
 		json.NewDecoder(r.Body).Decode(&w)
 		_, err := db.Exec(context.Background(), "UPDATE words SET word=$1 WHERE id=$2", w.Word, id)
@@ -56,7 +70,7 @@ func handler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra actualizada"})
 
 	case "DELETE":
-		id, _ := strconv.Atoi(ps.ByName("id"))
+		id, _ := strconv.Atoi(r.URL.Query().Get("id"))
 		_, err := db.Exec(context.Background(), "DELETE FROM words WHERE id=$1", id)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -64,14 +78,4 @@ func handler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		}
 		json.NewEncoder(w).Encode(map[string]string{"message": "Palabra eliminada"})
 	}
-}
-
-func main() {
-	router := httprouter.New()
-	router.GET("/api/words", handler)
-	router.POST("/api/words", handler)
-	router.PUT("/api/words/:id", handler)
-	router.DELETE("/api/words/:id", handler)
-
-	http.ListenAndServe(":3000", router)
 }
