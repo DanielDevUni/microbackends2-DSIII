@@ -1,9 +1,3 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "api/words.go", "use": "@vercel/go" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "api/words.go" }
-  ]
+  "version": 2
 }
