@@ -19,6 +19,19 @@ type Word struct {
 	Word string `json:"word"`
 }
 
+func setCORSHeaders(w http.ResponseWriter, r *http.Request) {
+	origin := strings.TrimSpace(os.Getenv("CORS_ORIGIN"))
+	if origin == "" {
+		origin = "*"
+	}
+
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Max-Age", "86400")
+	w.Header().Set("Vary", "Origin")
+}
+
 func connectDB(connStr string) (*pgx.Conn, error) {
 	config, err := pgx.ParseConfig(connStr)
 	if err != nil {
@@ -105,9 +118,15 @@ func getWordID(r *http.Request) (int, error) {
 
 // Esta es la funcion que Vercel detecta.
 func Handler(w http.ResponseWriter, r *http.Request) {
+	setCORSHeaders(w, r)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Debug-Method", r.Method)
 	w.Header().Set("X-Debug-Path", r.URL.Path)
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
 	db, err := GetDB()
 	if err != nil {
